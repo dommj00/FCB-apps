@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Video from 'react-native-video';
+import { ArrowLeft, Check, Play, Pause, Scissors, Type, Smile, Upload } from 'lucide-react-native';
 import { colors, spacing, fontSize } from '../theme';
+import Timeline from '../components/Timeline';
 
 const { width, height } = Dimensions.get('window');
 
@@ -67,11 +69,11 @@ const SingleClipEditorScreen: React.FC<SingleClipEditorScreenProps> = ({ route, 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← Back</Text>
+          <ArrowLeft size={24} color={colors.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Clip</Text>
         <TouchableOpacity style={styles.doneButton}>
-          <Text style={styles.doneButtonText}>Done ✓</Text>
+          <Check size={24} color={colors.success} />
         </TouchableOpacity>
       </View>
 
@@ -98,37 +100,53 @@ const SingleClipEditorScreen: React.FC<SingleClipEditorScreenProps> = ({ route, 
       {/* Playback Controls */}
       <View style={styles.controlsContainer}>
         <TouchableOpacity onPress={togglePlayPause} style={styles.playButton}>
-          <Text style={styles.playButtonText}>{isPlaying ? '⏸' : '▶️'}</Text>
+          {isPlaying ? (
+            <Pause size={24} color={colors.text} />
+          ) : (
+            <Play size={24} color={colors.text} />
+          )}
         </TouchableOpacity>
         <Text style={styles.timeText}>
           {formatTime(currentTime)} / {formatTime(duration)}
         </Text>
       </View>
 
-      {/* Timeline Placeholder */}
+      {/* Timeline with Trim Handles */}
       <View style={styles.timelineContainer}>
         <Text style={styles.sectionTitle}>Timeline</Text>
-        <View style={styles.timelinePlaceholder}>
-          <Text style={styles.placeholderText}>Timeline thumbnails coming next...</Text>
-        </View>
+        {duration > 0 ? (
+          <Timeline
+            duration={duration}
+            currentTime={currentTime}
+            onSeek={handleSeek}
+            trimStart={trimStart}
+            trimEnd={trimEnd}
+            onTrimStartChange={setTrimStart}
+            onTrimEndChange={setTrimEnd}
+          />
+        ) : (
+          <View style={styles.timelinePlaceholder}>
+            <Text style={styles.placeholderText}>Loading timeline...</Text>
+          </View>
+        )}
       </View>
 
       {/* Tool Buttons */}
       <View style={styles.toolsContainer}>
         <TouchableOpacity style={styles.toolButton}>
-          <Text style={styles.toolIcon}>✂️</Text>
+          <Scissors size={28} color={colors.text} />
           <Text style={styles.toolText}>Trim</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.toolButton}>
-          <Text style={styles.toolIcon}>📝</Text>
+          <Type size={28} color={colors.text} />
           <Text style={styles.toolText}>Text</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.toolButton}>
-          <Text style={styles.toolIcon}>😎</Text>
+          <Smile size={28} color={colors.text} />
           <Text style={styles.toolText}>Memes</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.toolButton}>
-          <Text style={styles.toolIcon}>📤</Text>
+          <Upload size={28} color={colors.text} />
           <Text style={styles.toolText}>Export</Text>
         </TouchableOpacity>
       </View>
@@ -153,11 +171,6 @@ const styles = StyleSheet.create({
   backButton: {
     padding: spacing.sm,
   },
-  backButtonText: {
-    color: colors.primary,
-    fontSize: fontSize.md,
-    fontWeight: '600',
-  },
   headerTitle: {
     color: colors.text,
     fontSize: fontSize.lg,
@@ -166,14 +179,9 @@ const styles = StyleSheet.create({
   doneButton: {
     padding: spacing.sm,
   },
-  doneButtonText: {
-    color: colors.success,
-    fontSize: fontSize.md,
-    fontWeight: '600',
-  },
   videoContainer: {
     width: width,
-    height: width * (9 / 16), // 16:9 aspect ratio
+    height: width * (9 / 16),
     backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
@@ -207,9 +215,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  playButtonText: {
-    fontSize: 24,
   },
   timeText: {
     color: colors.text,
@@ -250,9 +255,6 @@ const styles = StyleSheet.create({
   toolButton: {
     alignItems: 'center',
     gap: spacing.xs,
-  },
-  toolIcon: {
-    fontSize: 28,
   },
   toolText: {
     color: colors.text,

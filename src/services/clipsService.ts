@@ -48,6 +48,18 @@ class ClipsService {
       throw new Error(error.response?.data?.message || 'Failed to get download URL');
     }
   }
+
+  async getTimelineThumbnails(clipId: string, count: number = 10): Promise<string[]> {
+    try {
+      const response = await apiClient.get(`/api/clips/${clipId}/thumbnails`, {
+        params: { count }
+      });
+      return response.data.thumbnails || [];
+    } catch (error: any) {
+      console.log('Timeline thumbnails not available, using fallback');
+      return [];
+    }
+  }
 }
 
 export default new ClipsService();

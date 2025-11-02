@@ -1,128 +1,82 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
-  ActivityIndicator,
-  RefreshControl,
   TouchableOpacity,
+  FlatList,
+  Image,
+  ActivityIndicator,
   Alert,
-  ScrollView,
 } from 'react-native';
-import { clipsAPI } from '../services/api/clipsApi';
-import { Clip } from '../types';
-import ClipCard from '../components/ClipCard';
-import FloatingActionButton from '../components/FloatingActionButton';
-import SearchBar from '../components/SearchBar';
-import FilterChip from '../components/FilterChip';
-import { colors, spacing, fontSize, borderRadius } from '../theme/colors';
+import { LogOut } from 'lucide-react-native';
+import { useAppDispatch } from '../store/hooks';
+import { logout } from '../store/authSlice';
+import { colors, spacing, fontSize } from '../theme';
+import clipsService from '../services/clipsService';
 
-const RESOLUTIONS = ['All', '720p', '1080p', '1440p'];
-const STATUSES = ['All', 'complete', 'processing', 'error'];
+interface ClipsLibraryScreenProps {
+  navigation: any;
+}
 
-const ClipsLibraryScreen = () => {
-  const [clips, setClips] = useState<Clip[]>([]);
+const ClipsLibraryScreen: React.FC<ClipsLibraryScreenProps> = ({ navigation }) => {
+  const dispatch = useAppDispatch();
+  const [clips, setClips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set());
-  const [selectionMode, setSelectionMode] = useState(false);
-  
-  // Search and filter state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedResolution, setSelectedResolution] = useState('All');
-  const [selectedStatus, setSelectedStatus] = useState('All');
-
-  const fetchClips = async () => {
-    try {
-      console.log('Fetching clips...');
-      const response = await clipsAPI.getClips();
-      console.log('Fetched clips:', response.clips.length);
-      setClips(response.clips);
-    } catch (error: any) {
-      console.error('Error fetching clips:', error.message);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
 
   useEffect(() => {
-    fetchClips();
+    loadClips();
   }, []);
 
-  // Filter clips based on search and filters
-  const filteredClips = useMemo(() => {
-    return clips.filter((clip) => {
-      // Search filter
-      const searchLower = searchQuery.toLowerCase();
-      const matchesSearch =
-        !searchQuery ||
-        clip.stream_title?.toLowerCase().includes(searchLower) ||
-        clip.stream_game?.toLowerCase().includes(searchLower) ||
-        clip.clip_id.toLowerCase().includes(searchLower);
-
-      // Resolution filter
-      const matchesResolution =
-        selectedResolution === 'All' || clip.resolution === selectedResolution;
-
-      // Status filter
-      const matchesStatus =
-        selectedStatus === 'All' || clip.status === selectedStatus;
-
-      return matchesSearch && matchesResolution && matchesStatus;
-    });
-  }, [clips, searchQuery, selectedResolution, selectedStatus]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchClips();
-  };
-
-  const handleClipPress = (clipId: string) => {
-    if (selectionMode) {
-      toggleSelection(clipId);
-    } else {
-      console.log('Open clip:', clipId);
-      Alert.alert('Clip Selected', 'Single clip editor coming soon!');
+  const loadClips = async () => {
+    try {
+      setLoading(true);
+      const response = await clipsService.getClips('kaznightfury', 'ready');
+      setClips(response.clips || []);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load clips');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleClipLongPress = (clipId: string) => {
-    if (!selectionMode) {
-      setSelectionMode(true);
-      toggleSelection(clipId);
-    }
+  const handleLogout = () => {
+    dispatch(logout());
   };
 
-  const toggleSelection = (clipId: string) => {
-    const newSelected = new Set(selectedClips);
-    if (newSelected.has(clipId)) {
-      newSelected.delete(clipId);
-    } else {
-      newSelected.add(clipId);
-    }
-    setSelectedClips(newSelected);
-
-    if (newSelected.size === 0) {
-      setSelectionMode(false);
-    }
+  const handleClipPress = (clip: any) => {
+    navigation.navigate('SingleClipEditor', { clip });
   };
 
-  const handleCancelSelection = () => {
-    setSelectedClips(new Set());
-    setSelectionMode(false);
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleCreateMontage = () => {
-    const clipIds = Array.from(selectedClips);
-    console.log('Creating montage with clips:', clipIds);
-    Alert.alert(
-      'Create Montage',
-      `Ready to create montage with ${clipIds.length} clips!\n\nMontage editor coming soon!`,
-      [{ text: 'OK' }]
-    );
-  };
+  const renderClipItem = ({ item }: { item: any }) => (
+    <TouchableOpacity
+      style={styles.clipCard}
+      onPress={() => handleClipPress(item)}
+    >
+      <Image
+        source={{ uri: item.thumbnail_url }}
+        style={styles.thumbnail}
+        resizeMode="cover"
+      />
+      <View style={styles.clipInfo}>
+        <Text style={styles.clipTitle} numberOfLines={2}>
+          {item.stream_title || 'Untitled Clip'}
+        </Text>
+        <Text style={styles.clipMeta}>
+          {formatDuration(item.duration_seconds)} • {item.resolution}
+        </Text>
+        <Text style={styles.clipDate}>
+          {new Date(item.created_at).toLocaleDateString()}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   if (loading) {
     return (
@@ -137,113 +91,30 @@ const ClipsLibraryScreen = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Clips Library</Text>
-          {selectionMode && (
-            <Text style={styles.selectionCount}>
-              {selectedClips.size} selected
-            </Text>
-          )}
-        </View>
-        {selectionMode && (
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={handleCancelSelection}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-        )}
+        <Text style={styles.title}>FuryClips</Text>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+          <LogOut size={18} color={colors.text} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Search and Filters */}
-      {!selectionMode && (
-        <View style={styles.filtersContainer}>
-          <SearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onClear={() => setSearchQuery('')}
-          />
-          
-          <Text style={styles.filterLabel}>Resolution</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterRow}>
-            {RESOLUTIONS.map((res) => (
-              <FilterChip
-                key={res}
-                label={res}
-                active={selectedResolution === res}
-                onPress={() => setSelectedResolution(res)}
-              />
-            ))}
-          </ScrollView>
-
-          <Text style={styles.filterLabel}>Status</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterRow}>
-            {STATUSES.map((status) => (
-              <FilterChip
-                key={status}
-                label={status.charAt(0).toUpperCase() + status.slice(1)}
-                active={selectedStatus === status}
-                onPress={() => setSelectedStatus(status)}
-              />
-            ))}
-          </ScrollView>
+      {/* Clips List */}
+      {clips.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>No clips available</Text>
+          <Text style={styles.emptySubtext}>
+            Create clips using !fury command in Twitch chat
+          </Text>
         </View>
+      ) : (
+        <FlatList
+          data={clips}
+          renderItem={renderClipItem}
+          keyExtractor={(item) => item.clip_id}
+          contentContainerStyle={styles.listContainer}
+          numColumns={2}
+        />
       )}
-
-      {/* Results count */}
-      {!selectionMode && (
-        <Text style={styles.resultsCount}>
-          {filteredClips.length} clip{filteredClips.length !== 1 ? 's' : ''}
-        </Text>
-      )}
-
-      {/* Clips Grid */}
-      <FlatList
-        data={filteredClips}
-        keyExtractor={(item) => item.clip_id}
-        numColumns={2}
-        columnWrapperStyle={styles.row}
-        renderItem={({ item }) => (
-          <ClipCard
-            clip={item}
-            selected={selectedClips.has(item.clip_id)}
-            onPress={() => handleClipPress(item.clip_id)}
-            onLongPress={() => handleClipLongPress(item.clip_id)}
-          />
-        )}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
-        }
-        contentContainerStyle={[
-          styles.listContent,
-          selectionMode && styles.listContentWithFAB,
-        ]}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No clips found</Text>
-            <Text style={styles.emptySubtext}>
-              Try adjusting your filters
-            </Text>
-          </View>
-        }
-      />
-
-      {/* Floating Action Button */}
-      <FloatingActionButton
-        visible={selectionMode && selectedClips.size > 0}
-        count={selectedClips.size}
-        onPress={handleCreateMontage}
-      />
     </View>
   );
 };
@@ -257,93 +128,86 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    padding: spacing.xl,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  headerLeft: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: fontSize.xl,
+  title: {
+    fontSize: fontSize.xxl,
     fontWeight: 'bold',
     color: colors.primary,
   },
-  selectionCount: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.accent,
-    marginTop: 4,
-  },
-  cancelButton: {
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.error,
+    borderRadius: 8,
   },
-  cancelButtonText: {
+  logoutText: {
     color: colors.text,
     fontSize: fontSize.sm,
-    fontWeight: '600',
-  },
-  filtersContainer: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  filterLabel: {
-    color: colors.textSecondary,
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.xs,
-  },
-  resultsCount: {
-    color: colors.textSecondary,
-    fontSize: fontSize.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    fontWeight: 'bold',
   },
   loadingText: {
     color: colors.textSecondary,
-    marginTop: spacing.md,
     fontSize: fontSize.md,
+    marginTop: spacing.md,
   },
-  listContent: {
-    padding: spacing.lg,
+  listContainer: {
+    padding: spacing.sm,
   },
-  listContentWithFAB: {
-    paddingBottom: spacing.xl + 80,
+  clipCard: {
+    flex: 1,
+    margin: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  row: {
-    justifyContent: 'space-between',
+  thumbnail: {
+    width: '100%',
+    height: 120,
+    backgroundColor: colors.backgroundDark,
   },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxl,
+  clipInfo: {
+    padding: spacing.sm,
+  },
+  clipTitle: {
+    color: colors.text,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  clipMeta: {
+    color: colors.textSecondary,
+    fontSize: fontSize.xs,
+    marginBottom: spacing.xs,
+  },
+  clipDate: {
+    color: colors.textSecondary,
+    fontSize: fontSize.xs,
   },
   emptyText: {
-    color: colors.text,
     fontSize: fontSize.lg,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   emptySubtext: {
-    color: colors.textSecondary,
     fontSize: fontSize.sm,
-    marginTop: spacing.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });
 
