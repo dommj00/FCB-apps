@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useAppDispatch } from '../store/hooks';
 import { setUser, setLoading, setError } from '../store/authSlice';
@@ -17,25 +16,34 @@ const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const dispatch = useAppDispatch();
 
   const handleLogin = async () => {
+    console.log('Login button pressed');
+    
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+      setErrorMessage('Please enter email and password');
+      console.log('Error: Missing email or password');
       return;
     }
 
     setIsLoading(true);
+    setErrorMessage('');
     dispatch(setLoading(true));
 
     try {
+      console.log('Attempting login with:', email);
       const user = await authService.login(email, password);
+      console.log('Login successful:', user);
       dispatch(setUser(user));
     } catch (error: any) {
+      console.error('Login error:', error.message);
       dispatch(setError(error.message));
-      Alert.alert('Login Failed', error.message);
+      setErrorMessage(error.message);
     } finally {
       setIsLoading(false);
+      dispatch(setLoading(false));
     }
   };
 
@@ -66,6 +74,10 @@ const LoginScreen = () => {
             secureTextEntry
             editable={!isLoading}
           />
+
+          {errorMessage ? (
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          ) : null}
 
           <TouchableOpacity
             style={styles.button}
@@ -119,6 +131,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  errorText: {
+    color: colors.error,
+    fontSize: fontSize.sm,
+    textAlign: 'center',
   },
   button: {
     backgroundColor: colors.primary,

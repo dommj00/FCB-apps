@@ -2,6 +2,7 @@ export const colors = {
   // Night Fury Theme
   primary: '#9D4EDD',      // Purple
   secondary: '#00FF94',    // Green/Neon
+  accent: '#00FF94',       // Accent (same as secondary)
   background: '#000000',   // Black
   surface: '#1A1A1A',      // Dark Gray
   text: '#FFFFFF',         // White
