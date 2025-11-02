@@ -1,8 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
-  ScrollView,
   Dimensions,
   PanResponder,
   Text,
@@ -11,7 +10,11 @@ import { colors, spacing } from '../theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TIMELINE_HEIGHT = 80;
-const HANDLE_WIDTH = 20;
+const TIMELINE_PADDING = 16;
+const HANDLE_WIDTH = 16;
+const EDGE_PADDING = 12; // Visual padding on left and right edges
+const TIMELINE_WIDTH = SCREEN_WIDTH - (TIMELINE_PADDING * 2);
+const FILMSTRIP_WIDTH = TIMELINE_WIDTH - (EDGE_PADDING * 2);
 
 interface TimelineProps {
   duration: number;
@@ -32,63 +35,63 @@ const Timeline: React.FC<TimelineProps> = ({
   onTrimStartChange,
   onTrimEndChange,
 }) => {
-  const scrollViewRef = useRef<ScrollView>(null);
   const [activeHandle, setActiveHandle] = useState<'none' | 'left' | 'right' | 'playhead'>('none');
 
-  // Calculate timeline width (60px per second)
-  const timelineWidth = Math.max(SCREEN_WIDTH - 32, duration * 60);
+  // Calculate positions within the filmstrip area
+  const trimStartPos = EDGE_PADDING + (trimStart / duration) * FILMSTRIP_WIDTH;
+  const trimEndPos = EDGE_PADDING + (trimEnd / duration) * FILMSTRIP_WIDTH;
+  const playheadPos = EDGE_PADDING + (currentTime / duration) * FILMSTRIP_WIDTH;
 
-  // Calculate positions
-  const trimStartPosition = (trimStart / duration) * timelineWidth;
-  const trimEndPosition = (trimEnd / duration) * timelineWidth;
-  const playheadPosition = (currentTime / duration) * timelineWidth;
+  // Generate visual segments
+  const segmentCount = 20;
+  const segmentWidth = FILMSTRIP_WIDTH / segmentCount;
 
-  // Pan responder for trim handles and playhead
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: (evt) => {
-        const x = evt.nativeEvent.locationX;
-        
-        // Check if touching left trim handle
-        if (Math.abs(x - trimStartPosition) < HANDLE_WIDTH) {
-          setActiveHandle('left');
-          return true;
-        }
-        
-        // Check if touching right trim handle
-        if (Math.abs(x - trimEndPosition) < HANDLE_WIDTH) {
-          setActiveHandle('right');
-          return true;
-        }
-        
-        // Otherwise it's the playhead
-        setActiveHandle('playhead');
+  // Pan responder
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: (evt) => {
+      const x = evt.nativeEvent.locationX;
+      
+      // Check handles with larger touch area
+      if (Math.abs(x - trimStartPos) < 25) {
+        setActiveHandle('left');
         return true;
-      },
-      onMoveShouldSetPanResponder: () => activeHandle !== 'none',
-      onPanResponderMove: (evt, gestureState) => {
-        const x = Math.max(0, Math.min(evt.nativeEvent.locationX, timelineWidth));
-        const time = (x / timelineWidth) * duration;
-        
-        if (activeHandle === 'left') {
-          // Move left trim handle (can't go past right handle)
-          const newStart = Math.max(0, Math.min(time, trimEnd - 1));
-          onTrimStartChange(newStart);
-        } else if (activeHandle === 'right') {
-          // Move right trim handle (can't go before left handle)
-          const newEnd = Math.max(trimStart + 1, Math.min(time, duration));
-          onTrimEndChange(newEnd);
-        } else if (activeHandle === 'playhead') {
-          // Move playhead (stays within trim range)
-          const newTime = Math.max(trimStart, Math.min(time, trimEnd));
-          onSeek(newTime);
-        }
-      },
-      onPanResponderRelease: () => {
-        setActiveHandle('none');
-      },
-    })
-  ).current;
+      }
+      
+      if (Math.abs(x - trimEndPos) < 25) {
+        setActiveHandle('right');
+        return true;
+      }
+      
+      // Playhead
+      setActiveHandle('playhead');
+      return true;
+    },
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderMove: (evt) => {
+      const x = evt.nativeEvent.locationX;
+      
+      // Clamp x to filmstrip bounds
+      const clampedX = Math.max(EDGE_PADDING, Math.min(x, EDGE_PADDING + FILMSTRIP_WIDTH));
+      
+      // Convert to time
+      const percentage = (clampedX - EDGE_PADDING) / FILMSTRIP_WIDTH;
+      const time = percentage * duration;
+      
+      if (activeHandle === 'left') {
+        const newStart = Math.max(0, Math.min(time, trimEnd - 1));
+        onTrimStartChange(newStart);
+      } else if (activeHandle === 'right') {
+        const newEnd = Math.max(trimStart + 1, Math.min(time, duration));
+        onTrimEndChange(newEnd);
+      } else if (activeHandle === 'playhead') {
+        const newTime = Math.max(trimStart, Math.min(time, trimEnd));
+        onSeek(newTime);
+      }
+    },
+    onPanResponderRelease: () => {
+      setActiveHandle('none');
+    },
+  });
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -98,148 +101,177 @@ const Timeline: React.FC<TimelineProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Trim time labels */}
+      {/* Time labels */}
       <View style={styles.timeLabels}>
         <Text style={styles.timeLabel}>{formatTime(trimStart)}</Text>
         <Text style={styles.timeLabel}>{formatTime(trimEnd - trimStart)}</Text>
         <Text style={styles.timeLabel}>{formatTime(trimEnd)}</Text>
       </View>
 
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ width: timelineWidth }}
+      <View
+        style={styles.timelineContainer}
         {...panResponder.panHandlers}
       >
-        {/* Gray timeline background */}
-        <View style={[styles.timelineBackground, { width: timelineWidth }]}>
-          {/* Time markers every 10 seconds */}
-          {Array.from({ length: Math.floor(duration / 10) }).map((_, index) => (
+        {/* Filmstrip segments */}
+        <View style={[styles.filmstrip, { left: EDGE_PADDING, width: FILMSTRIP_WIDTH }]}>
+          {Array.from({ length: segmentCount }).map((_, index) => (
             <View
               key={index}
               style={[
-                styles.timeMarker,
-                { left: ((index + 1) * 10 / duration) * timelineWidth }
+                styles.segment,
+                {
+                  width: segmentWidth,
+                  backgroundColor: index % 2 === 0 ? '#2d3748' : '#374151',
+                }
               ]}
             />
           ))}
         </View>
 
-        {/* Dimmed regions (before trim start and after trim end) */}
-        <View style={[styles.dimmedRegion, { width: trimStartPosition }]} />
-        <View style={[
-          styles.dimmedRegion,
-          { left: trimEndPosition, width: timelineWidth - trimEndPosition }
-        ]} />
+        {/* Dimmed regions */}
+        {(trimStartPos - EDGE_PADDING) > 0 && (
+          <View style={[
+            styles.dimmedRegion,
+            {
+              left: EDGE_PADDING,
+              width: trimStartPos - EDGE_PADDING
+            }
+          ]} />
+        )}
+        {(trimEndPos) < (EDGE_PADDING + FILMSTRIP_WIDTH) && (
+          <View style={[
+            styles.dimmedRegion,
+            {
+              left: trimEndPos,
+              width: (EDGE_PADDING + FILMSTRIP_WIDTH) - trimEndPos,
+            }
+          ]} />
+        )}
 
-        {/* Active trim region highlight */}
+        {/* Active region border */}
         <View style={[
           styles.activeRegion,
           {
-            left: trimStartPosition,
-            width: trimEndPosition - trimStartPosition,
+            left: trimStartPos,
+            width: trimEndPos - trimStartPos,
           }
         ]} />
 
         {/* Left trim handle */}
-        <View style={[styles.trimHandle, { left: trimStartPosition }]}>
-          <View style={styles.trimHandleBar} />
-          <View style={styles.trimHandleGrip} />
+        <View style={[
+          styles.trimHandle,
+          styles.leftHandle,
+          { left: trimStartPos - (HANDLE_WIDTH / 2) }
+        ]}>
+          <View style={styles.handleGrip} />
+          <View style={styles.handleGrip} />
         </View>
 
         {/* Right trim handle */}
-        <View style={[styles.trimHandle, { left: trimEndPosition - HANDLE_WIDTH }]}>
-          <View style={styles.trimHandleBar} />
-          <View style={styles.trimHandleGrip} />
+        <View style={[
+          styles.trimHandle,
+          styles.rightHandle,
+          { left: trimEndPos - (HANDLE_WIDTH / 2) }
+        ]}>
+          <View style={styles.handleGrip} />
+          <View style={styles.handleGrip} />
         </View>
 
         {/* Playhead */}
-        <View style={[styles.playhead, { left: playheadPosition }]}>
+        <View style={[styles.playhead, { left: playheadPos - 1 }]}>
           <View style={styles.playheadLine} />
-          <View style={styles.playheadHandle} />
+          <View style={styles.playheadDot} />
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    height: TIMELINE_HEIGHT + 40,
-    backgroundColor: colors.background,
+    paddingHorizontal: TIMELINE_PADDING,
+    paddingVertical: spacing.md,
   },
   timeLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   timeLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textSecondary,
   },
-  timelineBackground: {
+  timelineContainer: {
+    width: TIMELINE_WIDTH,
     height: TIMELINE_HEIGHT,
-    backgroundColor: colors.surface,
+    position: 'relative',
     borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#1a1d29',
   },
-  timeMarker: {
+  filmstrip: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: colors.border,
+    flexDirection: 'row',
+    height: '100%',
+  },
+  segment: {
+    height: '100%',
+    borderRightWidth: 1,
+    borderRightColor: '#1a1d29',
   },
   dimmedRegion: {
     position: 'absolute',
     top: 0,
-    height: TIMELINE_HEIGHT,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 4,
+    height: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   activeRegion: {
     position: 'absolute',
     top: 0,
-    height: TIMELINE_HEIGHT,
-    borderTopWidth: 2,
-    borderBottomWidth: 2,
+    height: '100%',
+    borderWidth: 2,
     borderColor: colors.primary,
   },
   trimHandle: {
     position: 'absolute',
-    top: 0,
+    top: -5,
     width: HANDLE_WIDTH,
-    height: TIMELINE_HEIGHT,
+    height: TIMELINE_HEIGHT + 10,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
+    borderWidth: 2,
+    borderColor: colors.text,
   },
-  trimHandleBar: {
-    width: 4,
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 2,
+  leftHandle: {
+    borderTopLeftRadius: 6,
+    borderBottomLeftRadius: 6,
   },
-  trimHandleGrip: {
-    position: 'absolute',
-    width: 20,
-    height: 30,
-    backgroundColor: colors.primary,
-    borderRadius: 4,
+  rightHandle: {
+    borderTopRightRadius: 6,
+    borderBottomRightRadius: 6,
+  },
+  handleGrip: {
+    width: 2,
+    height: 16,
+    backgroundColor: colors.text,
+    borderRadius: 1,
+    marginVertical: 1,
   },
   playhead: {
     position: 'absolute',
-    top: 0,
+    top: -10,
     width: 2,
     height: TIMELINE_HEIGHT + 20,
-    zIndex: 10,
+    zIndex: 5,
   },
   playheadLine: {
     width: 2,
     height: '100%',
     backgroundColor: colors.text,
   },
-  playheadHandle: {
+  playheadDot: {
     position: 'absolute',
     top: -4,
     left: -6,
