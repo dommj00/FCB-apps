@@ -10,6 +10,8 @@
     "test": "jest"
   },
   "dependencies": {
+    "@giphy/js-fetch-api": "^5.7.0",
+    "@giphy/react-native-sdk": "^5.0.1",
     "@react-native-async-storage/async-storage": "^1.24.0",
     "@react-native-community/slider": "^5.1.0",
     "@react-native-firebase/app": "^23.5.0",
